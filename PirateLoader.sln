@@ -1,0 +1,41 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 14
+VisualStudioVersion = 14.0.24720.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "PirateLoader", "PirateLoader\PirateLoader.vcxproj", "{870C3B65-8738-4E80-B610-C73F1AC2393B}"
+	ProjectSection(ProjectDependencies) = postProject
+		{7EA23D0C-BDDE-4B21-AF7F-24F601A11F21} = {7EA23D0C-BDDE-4B21-AF7F-24F601A11F21}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TestDll", "TestDll\TestDll.vcxproj", "{7EA23D0C-BDDE-4B21-AF7F-24F601A11F21}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{870C3B65-8738-4E80-B610-C73F1AC2393B}.Debug|x64.ActiveCfg = Debug|x64
+		{870C3B65-8738-4E80-B610-C73F1AC2393B}.Debug|x64.Build.0 = Debug|x64
+		{870C3B65-8738-4E80-B610-C73F1AC2393B}.Debug|x86.ActiveCfg = Debug|Win32
+		{870C3B65-8738-4E80-B610-C73F1AC2393B}.Debug|x86.Build.0 = Debug|Win32
+		{870C3B65-8738-4E80-B610-C73F1AC2393B}.Release|x64.ActiveCfg = Release|x64
+		{870C3B65-8738-4E80-B610-C73F1AC2393B}.Release|x64.Build.0 = Release|x64
+		{870C3B65-8738-4E80-B610-C73F1AC2393B}.Release|x86.ActiveCfg = Release|Win32
+		{870C3B65-8738-4E80-B610-C73F1AC2393B}.Release|x86.Build.0 = Release|Win32
+		{7EA23D0C-BDDE-4B21-AF7F-24F601A11F21}.Debug|x64.ActiveCfg = Debug|x64
+		{7EA23D0C-BDDE-4B21-AF7F-24F601A11F21}.Debug|x64.Build.0 = Debug|x64
+		{7EA23D0C-BDDE-4B21-AF7F-24F601A11F21}.Debug|x86.ActiveCfg = Debug|Win32
+		{7EA23D0C-BDDE-4B21-AF7F-24F601A11F21}.Debug|x86.Build.0 = Debug|Win32
+		{7EA23D0C-BDDE-4B21-AF7F-24F601A11F21}.Release|x64.ActiveCfg = Release|x64
+		{7EA23D0C-BDDE-4B21-AF7F-24F601A11F21}.Release|x64.Build.0 = Release|x64
+		{7EA23D0C-BDDE-4B21-AF7F-24F601A11F21}.Release|x86.ActiveCfg = Release|Win32
+		{7EA23D0C-BDDE-4B21-AF7F-24F601A11F21}.Release|x86.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

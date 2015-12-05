@@ -1,0 +1,32 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="common">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="common\logging">
+      <UniqueIdentifier>{55733e1f-b3b3-43e7-91e5-3f2f53ba028c}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="main.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="common\common.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="common\types.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="common\logging\logging.hpp">
+      <Filter>common\logging</Filter>
+    </ClInclude>
+    <ClInclude Include="common\exceptions.h">
+      <Filter>common</Filter>
+    </ClInclude>
+    <ClInclude Include="common\handles.hpp">
+      <Filter>common</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
