@@ -53,8 +53,8 @@ auto get_pe_header_pointer(const vector<byte>& dll_buffer) {
 	return (PIMAGE_NT_HEADERS32)(dll_buffer.data() + ((PIMAGE_DOS_HEADER)(dll_buffer.data()))->e_lfanew);
 }
 
-auto format_pe_timestamp(const PIMAGE_NT_HEADERS32 pe_header) {
-	auto timestamp = static_cast<__time32_t>(pe_header->FileHeader.TimeDateStamp);
+auto format_timestamp(DWORD raw_timestamp) {
+	auto timestamp = static_cast<__time32_t>(raw_timestamp);
 	vector<byte> timestamp_string(PE_TIMESTAMP_CTIME_FORMAT_MAX_BUFFER_SIZE, 0);
 
 	auto res = _ctime32_s((char *)(timestamp_string.data()), timestamp_string.size(), &timestamp);
@@ -71,7 +71,7 @@ void display_pe_header_statistics(const PIMAGE_NT_HEADERS32 pe_header) {
 	}
 
 	cout << "PE Header Statistics" << endl;
-	cout << "\tTimestamp: " << format_pe_timestamp(pe_header);
+	cout << "\tTimestamp: " << format_timestamp(pe_header->FileHeader.TimeDateStamp);
 	cout << "\tSections: " << pe_header->FileHeader.NumberOfSections << endl;
 	cout << "\tOptionalHeaderSize: " << pe_header->FileHeader.SizeOfOptionalHeader << endl;
 }
@@ -185,7 +185,7 @@ void perform_base_relocations(const vector<byte>& dll_buffer, VirtualMemoryPtr& 
 				// Do relocation by substituting the expected VA, with a new VA, where the image base is fixed
 				auto new_va = (DWORD)(image_base + expected_va - expected_image_base);
 				*address_to_relocated_value = new_va;
-				TRACE("[0x%08x] expected_va=0x%x -> new_va=0x%x", address_to_relocated_value, expected_va, new_va);
+				//TRACE("[0x%08x] expected_va=0x%x -> new_va=0x%x", address_to_relocated_value, expected_va, new_va);
 			}
 			// IMAGE_REL_BASED_ABSOLUTE is no op, the rest we can't handle...
 			else if (IMAGE_REL_BASED_ABSOLUTE != type) {
@@ -200,7 +200,68 @@ void perform_base_relocations(const vector<byte>& dll_buffer, VirtualMemoryPtr& 
 }
 
 void resolve_imports(const vector<byte>& dll_buffer, VirtualMemoryPtr& base_memory) {
+	TRACE("Starting to resolve imports...");
 
+	auto pe_header = get_pe_header_pointer(dll_buffer);
+	auto image_base = (PBYTE)base_memory.get();
+	auto import_table_data_directory = (PIMAGE_DATA_DIRECTORY)(&(pe_header->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT]));
+	auto table_start = (PBYTE)image_base + import_table_data_directory->VirtualAddress;
+	auto table_end = table_start + import_table_data_directory->Size;
+	TRACE("Found import table 0x%x<->0x%x (0x%x)", table_start, table_end, import_table_data_directory->Size);
+	
+	size_t descriptor_count = import_table_data_directory->Size / sizeof(IMAGE_IMPORT_DESCRIPTOR);
+	// -1, because last descriptor is nullified Descriptor
+	for (size_t i = 0; i < descriptor_count - 1; i++) {
+		auto import_descriptor = (PIMAGE_IMPORT_DESCRIPTOR)(table_start) + i;
+		if (!import_descriptor->Name) {
+			LOG_AND_THROW(ImportDescriptorInvalidException, "Import descriptor %d's Name's RVA is NULL!", i);
+		}
+		
+		auto module_name = string((const char *)(image_base + import_descriptor->Name));
+		TRACE("Found import descriptor for %hs", module_name.c_str());
+		if (import_descriptor->ForwarderChain != -1) {
+			// Currently will do absolutly nothing about it... mainly because I don't know what I should do.
+			// TRACE("ForwarderChain=%lu", import_descriptor->ForwarderChain);
+		}
+
+		if (import_descriptor->TimeDateStamp != 0) {
+			if (import_descriptor->TimeDateStamp == -1) {
+				TRACE("Dll was previously bound (new bind?)");
+			} else {
+				TRACE("Dll was previously bound (%hs)", format_timestamp(import_descriptor->TimeDateStamp).c_str());
+			}
+		}
+
+		// Do actual importing
+
+		// TODO: In the final version, we shouldn't use LoadLibrary, GetProcAddress, etc., but use the pirateloader recursively to load the dependencies
+		//       Also, need to refcount the dll's and stuff
+		
+		auto module = LoadLibraryA(module_name.c_str());
+		if (NULL == module) {
+			LOG_AND_THROW_WINAPI(LoadLibraryFailedException, LoadLibraryA);
+		}
+		string pretty_module_name(module_name.begin(), module_name.end() - string(".dll").size());
+
+		auto import_address_list = (PDWORD)(image_base + import_descriptor->FirstThunk);
+		auto import_name_list = (PDWORD)(image_base + import_descriptor->OriginalFirstThunk);
+
+		for (; *import_address_list && *import_name_list; import_address_list++, import_name_list++) {
+			auto name_data = (PIMAGE_IMPORT_BY_NAME)(image_base + *import_name_list);
+			TRACE("Importing %hs.%hs (Hint(Ordinal?)=%hu)", pretty_module_name.c_str(), name_data->Name, name_data->Hint);
+
+			// TODO: Yey! not x64 support!
+			FARPROC function_address = GetProcAddress(module, name_data->Name);
+			if (NULL == function_address) {
+				LOG_AND_THROW_WINAPI(GetProcAddressFailedException, GetProcAddress);
+			}
+			*import_address_list = (DWORD)(function_address);
+		}
+
+		// TODO: We didn't free the DLL! In the final version, this should be a part of the cleanup routine
+	}
+
+	TRACE("Done resolving imports\n");
 }
 
 int main(int argc, char *argv[]) {

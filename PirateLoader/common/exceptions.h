@@ -22,6 +22,10 @@ DECLARE_EXCEPTION(DllMagicException, CommonException);
 DECLARE_EXCEPTION(PEMagicException, CommonException);
 DECLARE_EXCEPTION(TimeStampFormatException, CommonException);
 DECLARE_EXCEPTION(RelocationTypeUnkownException, CommonException);
+DECLARE_EXCEPTION(ImportDescriptorInvalidException, CommonException);
+DECLARE_EXCEPTION(ImportForwardingNotImplementedException, CommonException);
+DECLARE_EXCEPTION(LoadLibraryFailedException, CommonException);
+DECLARE_EXCEPTION(GetProcAddressFailedException, CommonException);
 
 #define LOG_AND_THROW(exception_type, msg, ...) \
 {												\
