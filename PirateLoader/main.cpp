@@ -84,6 +84,22 @@ auto get_first_section(const vector<byte>& dll_buffer) {
 	return get_first_section(get_pe_header_pointer(dll_buffer));
 }
 
+size_t get_actual_section_size(PIMAGE_NT_HEADERS32 pe_header, PIMAGE_SECTION_HEADER section) {
+	auto size_to_commit = section->SizeOfRawData;
+	if (0 == size_to_commit) {
+		TRACE("Section SizeOfRawData == 0");
+		if (section->Characteristics & IMAGE_SCN_CNT_INITIALIZED_DATA) {
+			size_to_commit = pe_header->OptionalHeader.SizeOfInitializedData;
+			TRACE("IMAGE_SCN_CNT_INITIALIZED_DATA is set, using OptionalHeader.SizeOfInitializedData");
+		}
+		else if (section->Characteristics & IMAGE_SCN_CNT_UNINITIALIZED_DATA) {
+			size_to_commit = pe_header->OptionalHeader.SizeOfUninitializedData;
+			TRACE("IMAGE_SCN_CNT_UNINITIALIZED_DATA is set, using OptionalHeader.SizeOfUninitializedData");
+		}
+	}
+	return size_to_commit;
+}
+
 auto get_section_name(const PIMAGE_SECTION_HEADER section_header) {
 	string section_name((const char *)section_header->Name, (const char *)section_header->Name + sizeof(section_header->Name));
 	section_name.push_back(0);
@@ -111,18 +127,7 @@ auto allocate_and_copy_sections(const vector<byte>& dll_buffer) {
 		TRACE("%hs -> Commiting memory for section...", get_section_name(section).c_str());
 
 		// Determine size_to_commit 
-		auto size_to_commit = section->SizeOfRawData;
-		if (0 == size_to_commit) {
-			TRACE("Section SizeOfRawData == 0");
-			if (section->Characteristics & IMAGE_SCN_CNT_INITIALIZED_DATA) {
-				size_to_commit = pe_header->OptionalHeader.SizeOfInitializedData;
-				TRACE("IMAGE_SCN_CNT_INITIALIZED_DATA is set, using OptionalHeader.SizeOfInitializedData");
-			}
-			else if (section->Characteristics & IMAGE_SCN_CNT_UNINITIALIZED_DATA){
-				size_to_commit = pe_header->OptionalHeader.SizeOfUninitializedData;
-				TRACE("IMAGE_SCN_CNT_UNINITIALIZED_DATA is set, using OptionalHeader.SizeOfUninitializedData");
-			}
-		}
+		auto size_to_commit = get_actual_section_size(pe_header, section);
 
 		// If size_to_commit is bigger than 0, commit the memory. if it isn't, don't.
 		if (size_to_commit > 0) {
@@ -264,6 +269,66 @@ void resolve_imports(const vector<byte>& dll_buffer, VirtualMemoryPtr& base_memo
 	TRACE("Done resolving imports\n");
 }
 
+void fixup_sections(const vector<byte>& dll_buffer, VirtualMemoryPtr& base_memory) {
+	TRACE("Starting to fix sections protection...");
+
+	auto pe_header = get_pe_header_pointer(dll_buffer);
+	auto image_base = (PBYTE)base_memory.get();
+	auto first_section = get_first_section(pe_header);
+
+	TRACE("Iterating %hu sections", pe_header->FileHeader.NumberOfSections);
+	for (auto i = 0; i < pe_header->FileHeader.NumberOfSections; ++i) {
+		auto section = first_section + i;
+		
+		// TODO: Should check for discard sections here and shit
+
+		auto section_size = get_actual_section_size(pe_header, section);
+		if (section_size > 0) {
+			auto section_address = (LPVOID)(image_base + section->VirtualAddress);
+
+			// TODO: Need to map 
+			//		IMAGE_SCN_MEM_EXECUTE, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_WRITE
+			// Into:
+			//		PAGE_NOACCESS
+			//		PAGE_WRITECOPY
+			//		PAGE_READONLY
+			//		PAGE_READWRITE
+			//		PAGE_EXECUTE
+			//		PAGE_EXECUTE_WRITECOPY
+			//		PAGE_EXECUTE_READ
+			//		PAGE_EXECUTE_READWRITE
+			// For now, we'll just give all permissions and hope for the best
+
+			TRACE("%hs -> Setting section protection. 0x%x:%04x", get_section_name(section).c_str(), section_address, section_size);
+			DWORD new_protection = PAGE_EXECUTE_READWRITE;
+			DWORD previous_protection = 0;
+			if (!VirtualProtect(
+				section_address,
+				section_size,
+				new_protection,
+				&previous_protection)) {
+				LOG_AND_THROW_WINAPI(VirtualProtectFailedException, VirtualProtect);
+			}
+		}
+	}
+	TRACE("All Sections Done.\n");
+}
+
+typedef BOOL(WINAPI *DllEntryProc)(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved);
+
+void call_dllmain(const vector<byte>& dll_buffer, VirtualMemoryPtr& base_memory) {
+	TRACE("Starting DllMain Call...");
+
+	auto pe_header = get_pe_header_pointer(dll_buffer);
+	auto image_base = (PBYTE)base_memory.get();
+
+	DllEntryProc entry = (DllEntryProc)(image_base + pe_header->OptionalHeader.AddressOfEntryPoint);
+	(*entry)((HINSTANCE)image_base, DLL_PROCESS_ATTACH, 0);
+
+	TRACE("DllMain call completed");
+}
+
+
 int main(int argc, char *argv[]) {
 	try {
 		// 1. Get Buffer of DLL Check DOSHeader, PEHeader
@@ -291,10 +356,10 @@ int main(int argc, char *argv[]) {
 		resolve_imports(dll_buffer, base_memory);
 
 		// Step 6
-		//fixup_sections(dll_buffer, base_memory);
+		fixup_sections(dll_buffer, base_memory);
 
 		// Step 7
-		//call_dllmain(dll_buffer, base_memory);
+		call_dllmain(dll_buffer, base_memory);
 
 	}
 	catch (const CommonException&) {

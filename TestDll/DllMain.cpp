@@ -36,7 +36,7 @@ BOOL WINAPI DllMain(
 	_In_ LPVOID    lpvReserved) {
 
 	shit++;
-
+	printf("OMG GET WREKT\n");
 	switch (fdwReason) {
 	case DLL_PROCESS_ATTACH:
 	case DLL_THREAD_ATTACH:
