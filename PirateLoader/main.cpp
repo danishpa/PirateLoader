@@ -149,16 +149,8 @@ auto allocate_and_copy_sections(const vector<byte>& dll_buffer) {
 	return std::move(base_address);
 }
 
-#pragma pack (push)
-#pragma pack (1)
-typedef struct {
-	unsigned int type : 4;
-	unsigned int offset : 12;
-} BASE_RELOCATION, *PBASE_RELOCATION;
-#pragma pack (pop)
-
 void perform_base_relocations(const vector<byte>& dll_buffer, VirtualMemoryPtr& base_memory) {
-	TRACE("Starting address base relocations")
+	TRACE("Starting address base relocations...")
 
 	auto pe_header = get_pe_header_pointer(dll_buffer);
 	auto image_base = (PBYTE)base_memory.get();
@@ -168,7 +160,7 @@ void perform_base_relocations(const vector<byte>& dll_buffer, VirtualMemoryPtr& 
 	auto relocation_table_data_directory = (PIMAGE_DATA_DIRECTORY)(&(pe_header->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC]));
 	auto table_start = image_base + relocation_table_data_directory->VirtualAddress;
 	auto table_end = table_start + relocation_table_data_directory->Size;
-	TRACE("Relocation table spanning %x, 0x%x<->0x%x", relocation_table_data_directory->Size, table_start, table_end);
+	TRACE("Found Relocation table 0x%x<->0x%x (0x%x)", table_start, table_end, relocation_table_data_directory->Size);
 
 	auto block = (PIMAGE_BASE_RELOCATION)table_start;
 	while ((PBYTE)(block) < table_end) {
@@ -180,11 +172,12 @@ void perform_base_relocations(const vector<byte>& dll_buffer, VirtualMemoryPtr& 
 		auto block_data = (PBYTE)(block) + sizeof(IMAGE_BASE_RELOCATION);
 
 		for (auto relocation = (PWORD)block_data; (PBYTE)relocation < block_end; relocation++) {
+			// This is fucking hard to do without bit manipulation because of endianness
 			auto type = (*relocation) >> 12;
 			auto offset = (*relocation) & 0x0FFF;
 
+			// All relocations need to be of types IMAGE_REL_BASED_HIGHLOW (actual relocation) or IMAGE_REL_BASED_ABSOLUTE (do nothing).
 			if (IMAGE_REL_BASED_HIGHLOW == type) {
-
 				// Find Address for the current relocation to extract RVA
 				auto address_to_relocated_value = (PDWORD)(image_base + block->VirtualAddress + offset);
 				auto expected_va = *address_to_relocated_value;
@@ -206,10 +199,14 @@ void perform_base_relocations(const vector<byte>& dll_buffer, VirtualMemoryPtr& 
 	TRACE("Base relocations Done\n");
 }
 
+void resolve_imports(const vector<byte>& dll_buffer, VirtualMemoryPtr& base_memory) {
+
+}
+
 int main(int argc, char *argv[]) {
 	try {
 		// 1. Get Buffer of DLL Check DOSHeader, PEHeader
-		// 2. Try to allocate a memory block of PEHeader.OptionalHeader.SizeOfImage bytes at position PEHeader.OptionalHeader.ImageBase.
+		// 2. Try to allocate a memory block of PEHeader.OptionalHeader.SizeOfImage bytes (We are randoming the position instead of using PEHeader.OptionalHeader.ImageBase)
 		// 3. Parse section headers and copy sections to their addresses.
 		//    The destination address for each section, relative to the base of the allocated memory block, is stored in the VirtualAddress attribute of the IMAGE_SECTION_HEADER structure.
 		// 4. If the allocated memory block differs from ImageBase, various references in the code and/or data sections must be adjusted. This is called Base relocation.
@@ -223,12 +220,20 @@ int main(int argc, char *argv[]) {
 		auto dll_buffer = get_dll_buffer(argv[1]);
 		display_pe_header_statistics(get_pe_header_pointer(dll_buffer));
 
-		// Step 2
+		// Step 2 + Step 3
 		auto base_memory = allocate_and_copy_sections(dll_buffer);
 
-		// Step 3
+		// Step 4
 		perform_base_relocations(dll_buffer, base_memory);
 
+		// Step 5
+		resolve_imports(dll_buffer, base_memory);
+
+		// Step 6
+		//fixup_sections(dll_buffer, base_memory);
+
+		// Step 7
+		//call_dllmain(dll_buffer, base_memory);
 
 	}
 	catch (const CommonException&) {
