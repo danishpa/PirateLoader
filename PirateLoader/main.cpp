@@ -5,6 +5,7 @@
 
 static const DWORD PE_HEADER_MAGIC = 0x00004550;
 static const size_t PE_TIMESTAMP_CTIME_FORMAT_MAX_BUFFER_SIZE = 150;
+
 void verify_dll_magic(const vector<byte>& buffer) {
 	if (buffer.size() < 2) {
 		LOG_AND_THROW(DllMagicException, "Dll is too small to contain magic (size=%lu)", buffer.size());
@@ -37,7 +38,7 @@ auto get_dll_buffer(string path) {
 	// Read dll into buffer
 	DWORD bytes_read = 0;
 	vector<byte> buffer(file_size.LowPart, 0);
-	if (!ReadFile(handle.get(), buffer.data(), buffer.size(), &bytes_read, NULL)) {
+	if (!ReadFile(handle.get(), buffer.data(), static_cast<DWORD>(buffer.size()), &bytes_read, NULL)) {
 		LOG_AND_THROW_WINAPI(ReadFileFailedException, ReadFile);
 	}
 	if (bytes_read != buffer.size()) {
@@ -72,9 +73,15 @@ void display_pe_header_statistics(const PIMAGE_NT_HEADERS32 pe_header) {
 	cout << "PE Header Statistics" << endl;
 	cout << "\tTimestamp: " << format_pe_timestamp(pe_header);
 	cout << "\tSections: " << pe_header->FileHeader.NumberOfSections << endl;
-	cout << "\tSymbol Table Offset: " << pe_header->FileHeader.PointerToSymbolTable << endl;
-	cout << "\tSymbols: " << pe_header->FileHeader.NumberOfSymbols << endl;
 	cout << "\tOptionalHeaderSize: " << pe_header->FileHeader.SizeOfOptionalHeader << endl;
+}
+
+auto get_first_section(PIMAGE_NT_HEADERS32 pe_header) {
+	return IMAGE_FIRST_SECTION(pe_header);
+}
+
+auto get_first_section(const vector<byte>& dll_buffer) {
+	return get_first_section(get_pe_header_pointer(dll_buffer));
 }
 
 auto get_section_name(const PIMAGE_SECTION_HEADER section_header) {
@@ -96,8 +103,9 @@ auto allocate_and_copy_sections(const vector<byte>& dll_buffer) {
 	}
 	TRACE("MEM_RESERVE for Image. Got 0x%x:%x", base_address.get(), pe_header->OptionalHeader.SizeOfImage);
 	// Commit each section, and copy it
-	auto first_section = IMAGE_FIRST_SECTION(pe_header);
+	auto first_section = get_first_section(pe_header);
 
+	TRACE("Iterating %hu sections", pe_header->FileHeader.NumberOfSections);
 	for (auto i = 0; i < pe_header->FileHeader.NumberOfSections; ++i) {
 		auto section = first_section + i;
 		TRACE("%hs -> Commiting memory for section...", get_section_name(section).c_str());
@@ -120,16 +128,16 @@ auto allocate_and_copy_sections(const vector<byte>& dll_buffer) {
 		if (size_to_commit > 0) {
 			auto virtual_address_for_section = (LPVOID)((const PBYTE)base_address.get() + section->VirtualAddress);
 			TRACE("MEM_COMMIT 0x%x:%04x...", virtual_address_for_section, size_to_commit);
-			VirtualMemoryPtr section_memory(VirtualAlloc(
+			LPVOID section_memory = VirtualAlloc(
 				virtual_address_for_section,
 				size_to_commit,
 				MEM_COMMIT,
-				PAGE_READWRITE));
-			if (invalid(section_memory)) {
+				PAGE_READWRITE);
+			if (NULL == section_memory) {
 				LOG_AND_THROW_WINAPI(VirtualAllocFailedException, VirtualAlloc);
 			}
 			TRACE("Copying section RawData...")
-			CopyMemory(section_memory.get(), (LPVOID)(dll_buffer.data() + section->PointerToRawData), size_to_commit);
+			CopyMemory(section_memory, (LPVOID)(dll_buffer.data() + section->PointerToRawData), size_to_commit);
 
 		}
 		else {
@@ -138,11 +146,64 @@ auto allocate_and_copy_sections(const vector<byte>& dll_buffer) {
 		TRACE("Section Done.")
 	}
 	TRACE("All Sections Done.\n");
-	return base_address;
+	return std::move(base_address);
 }
 
-void perform_base_relocations(const vector<byte>& dll_buffer, VirtualMemoryPtr& base_memory) {
+#pragma pack (push)
+#pragma pack (1)
+typedef struct {
+	unsigned int type : 4;
+	unsigned int offset : 12;
+} BASE_RELOCATION, *PBASE_RELOCATION;
+#pragma pack (pop)
 
+void perform_base_relocations(const vector<byte>& dll_buffer, VirtualMemoryPtr& base_memory) {
+	TRACE("Starting address base relocations")
+
+	auto pe_header = get_pe_header_pointer(dll_buffer);
+	auto image_base = (PBYTE)base_memory.get();
+	auto expected_image_base = pe_header->OptionalHeader.ImageBase;
+	TRACE("ActualImageBase=0x%x, ExpectedImageBase=0x%x", image_base, expected_image_base);
+
+	auto relocation_table_data_directory = (PIMAGE_DATA_DIRECTORY)(&(pe_header->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC]));
+	auto table_start = image_base + relocation_table_data_directory->VirtualAddress;
+	auto table_end = table_start + relocation_table_data_directory->Size;
+	TRACE("Relocation table spanning %x, 0x%x<->0x%x", relocation_table_data_directory->Size, table_start, table_end);
+
+	auto block = (PIMAGE_BASE_RELOCATION)table_start;
+	while ((PBYTE)(block) < table_end) {
+		TRACE("RelocationBlock [0x%x]: VirtualAddress=0x%x, SizeOfBlock=0x%x", block, block->VirtualAddress, block->SizeOfBlock);
+		
+		// Some nasty pointer arithmatic.
+		// We start at the block, right after the VA+SizeOfBlock descriptor, and continue until the end of the block
+		auto block_end = (PBYTE)(block) + block->SizeOfBlock;
+		auto block_data = (PBYTE)(block) + sizeof(IMAGE_BASE_RELOCATION);
+
+		for (auto relocation = (PWORD)block_data; (PBYTE)relocation < block_end; relocation++) {
+			auto type = (*relocation) >> 12;
+			auto offset = (*relocation) & 0x0FFF;
+
+			if (IMAGE_REL_BASED_HIGHLOW == type) {
+
+				// Find Address for the current relocation to extract RVA
+				auto address_to_relocated_value = (PDWORD)(image_base + block->VirtualAddress + offset);
+				auto expected_va = *address_to_relocated_value;
+
+				// Do relocation by substituting the expected VA, with a new VA, where the image base is fixed
+				auto new_va = (DWORD)(image_base + expected_va - expected_image_base);
+				*address_to_relocated_value = new_va;
+				TRACE("[0x%08x] expected_va=0x%x -> new_va=0x%x", address_to_relocated_value, expected_va, new_va);
+			}
+			// IMAGE_REL_BASED_ABSOLUTE is no op, the rest we can't handle...
+			else if (IMAGE_REL_BASED_ABSOLUTE != type) {
+				LOG_AND_THROW(RelocationTypeUnkownException, "Cannot handle base relocation type %u", type);
+			}
+		}
+		// Advance to next block
+		block = (PIMAGE_BASE_RELOCATION)((PBYTE)block + block->SizeOfBlock);
+	}
+
+	TRACE("Base relocations Done\n");
 }
 
 int main(int argc, char *argv[]) {

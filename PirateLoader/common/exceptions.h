@@ -21,6 +21,7 @@ DECLARE_EXCEPTION(ReadFileSizeMismatchException, CommonException);
 DECLARE_EXCEPTION(DllMagicException, CommonException);
 DECLARE_EXCEPTION(PEMagicException, CommonException);
 DECLARE_EXCEPTION(TimeStampFormatException, CommonException);
+DECLARE_EXCEPTION(RelocationTypeUnkownException, CommonException);
 
 #define LOG_AND_THROW(exception_type, msg, ...) \
 {												\
