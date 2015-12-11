@@ -84,8 +84,16 @@ auto get_first_section(const vector<byte>& dll_buffer) {
 	return get_first_section(get_pe_header_pointer(dll_buffer));
 }
 
+auto get_section_name(const PIMAGE_SECTION_HEADER section_header) {
+	string section_name((const char *)section_header->Name, (const char *)section_header->Name + sizeof(section_header->Name));
+	section_name.push_back(0);
+	return section_name;
+}
+
 size_t get_actual_section_size(PIMAGE_NT_HEADERS32 pe_header, PIMAGE_SECTION_HEADER section) {
-	auto size_to_commit = section->SizeOfRawData;
+	// It's probably incorrect, need to check which one is true..
+	auto size_to_commit = section->Misc.VirtualSize;
+	
 	if (0 == size_to_commit) {
 		TRACE("Section SizeOfRawData == 0");
 		if (section->Characteristics & IMAGE_SCN_CNT_INITIALIZED_DATA) {
@@ -98,12 +106,6 @@ size_t get_actual_section_size(PIMAGE_NT_HEADERS32 pe_header, PIMAGE_SECTION_HEA
 		}
 	}
 	return size_to_commit;
-}
-
-auto get_section_name(const PIMAGE_SECTION_HEADER section_header) {
-	string section_name((const char *)section_header->Name, (const char *)section_header->Name + sizeof(section_header->Name));
-	section_name.push_back(0);
-	return section_name;
 }
 
 auto allocate_and_copy_sections(const vector<byte>& dll_buffer) {
@@ -142,8 +144,9 @@ auto allocate_and_copy_sections(const vector<byte>& dll_buffer) {
 			if (NULL == section_memory) {
 				LOG_AND_THROW_WINAPI(VirtualAllocFailedException, VirtualAlloc);
 			}
-			TRACE("Copying section RawData...")
-			CopyMemory(section_memory, (LPVOID)(dll_buffer.data() + section->PointerToRawData), size_to_commit);
+			TRACE("Copying section RawData...");
+			
+			CopyMemory(section_memory, (LPVOID)(dll_buffer.data() + section->PointerToRawData), section->SizeOfRawData);
 
 		}
 		else {
@@ -286,7 +289,7 @@ void fixup_sections(const vector<byte>& dll_buffer, VirtualMemoryPtr& base_memor
 		auto section = first_section + i;
 		
 		// TODO: Should check for discard sections here and shit
-
+		
 		auto section_size = get_actual_section_size(pe_header, section);
 		if (section_size > 0) {
 			auto section_address = (LPVOID)(image_base + section->VirtualAddress);
@@ -294,19 +297,13 @@ void fixup_sections(const vector<byte>& dll_buffer, VirtualMemoryPtr& base_memor
 				VirtualFree(section_address, section_size, MEM_DECOMMIT);
 				continue;
 			}*/
-
+			
 			DWORD new_protection = PAGE_NOACCESS;
-			if (IS_SECTION_READ(section) && IS_SECTION_WRITE(section) && IS_SECTION_EXECUTE(section)) {
-				new_protection = PAGE_EXECUTE_READWRITE;
-			}
-			else if (IS_SECTION_READ(section) && IS_SECTION_WRITE(section)) {
-				new_protection = PAGE_READWRITE;
-			}
-			else if (IS_SECTION_READ(section) && IS_SECTION_EXECUTE(section)) {
+			if (IS_SECTION_EXECUTE(section)) {
 				new_protection = PAGE_EXECUTE_READ;
 			}
 			else if (IS_SECTION_READ(section)) {
-				new_protection = PAGE_READONLY;
+				new_protection = PAGE_READWRITE;
 			}
 			
 			// TODO: Need to map 
@@ -373,7 +370,7 @@ int main(int argc, char *argv[]) {
 		auto base_memory = allocate_and_copy_sections(dll_buffer);
 
 		// Step 4
-		perform_base_relocations(dll_buffer, base_memory);
+		//perform_base_relocations(dll_buffer, base_memory);
 
 		// Step 5
 		resolve_imports(dll_buffer, base_memory);
