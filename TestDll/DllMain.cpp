@@ -10,7 +10,7 @@ int DllExport() {
 	int a = 123;
 	shit++;
 	
-	printf("DllExport %d %d %d\n", a, shit, HARTA);
+	printf("\nDllExport %d %d %d\n\n", a, shit, HARTA);
 	return a;
 }
 
@@ -18,7 +18,7 @@ int DllExport2() {
 	int a = 456;
 	shit++;
 
-	printf("DllExport %d %d %d\n", a, shit, HARTA);
+	printf("\nDllExport %d %d %d\n\n", a, shit, HARTA);
 	return a;
 }
 
@@ -26,7 +26,7 @@ int DllExport3() {
 	int a = 789;
 	shit++;
 
-	printf("DllExport %d %d %d\n", a, shit, HARTA);
+	printf("\nDllExport %d %d %d\n\n", a, shit, HARTA);
 	return a;
 }
 
@@ -36,7 +36,8 @@ BOOL WINAPI DllMain(
 	_In_ LPVOID    lpvReserved) {
 
 	shit++;
-	printf("OMG GET WREKT\n");
+	printf("\nOMG I AM THE LENGENDARY DLL MAIN\n\n");
+
 	switch (fdwReason) {
 	case DLL_PROCESS_ATTACH:
 	case DLL_THREAD_ATTACH:

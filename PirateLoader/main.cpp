@@ -60,14 +60,16 @@ auto get_pe_header_pointer(const VirtualMemoryPtr& memory) {
 
 auto format_timestamp(DWORD raw_timestamp) {
 	auto timestamp = static_cast<__time32_t>(raw_timestamp);
-	vector<byte> timestamp_string(PE_TIMESTAMP_CTIME_FORMAT_MAX_BUFFER_SIZE, 0);
+	vector<byte> timestamp_vector(PE_TIMESTAMP_CTIME_FORMAT_MAX_BUFFER_SIZE, 0);
 
-	auto res = _ctime32_s((char *)(timestamp_string.data()), timestamp_string.size(), &timestamp);
+	auto res = _ctime32_s((char *)(timestamp_vector.data()), timestamp_vector.size(), &timestamp);
 	if (0 != res) {
 		TRACE_AND_THROW(TimeStampFormatException, "_ctime32_s Failed (res=%d)", res);
 	}
 
-	return string((const char *)timestamp_string.data());
+	auto timestamp_string = string((const char *)timestamp_vector.data());
+	timestamp_string.pop_back(); // remove newline
+	return timestamp_string;
 }
 
 void display_pe_header_statistics(const PIMAGE_NT_HEADERS32& pe_header) {
@@ -76,7 +78,7 @@ void display_pe_header_statistics(const PIMAGE_NT_HEADERS32& pe_header) {
 	}
 
 	cout << "PE Header Statistics" << endl;
-	cout << "\tTimestamp: " << format_timestamp(pe_header->FileHeader.TimeDateStamp);
+	cout << "\tTimestamp: " << format_timestamp(pe_header->FileHeader.TimeDateStamp) << endl;
 	cout << "\tSections: " << pe_header->FileHeader.NumberOfSections << endl;
 	cout << "\tOptionalHeaderSize: " << pe_header->FileHeader.SizeOfOptionalHeader << endl;
 }
@@ -364,7 +366,9 @@ auto get_proc_address(VirtualMemoryPtr& base_memory, const string& export_name) 
 		auto name = string((const char *)(image_base + address_of_names[i]));
 		if (0 == name.compare(export_name)) {
 			auto index = address_of_name_ordinals[i];
-			return (PVOID)(image_base + address_of_functions[index]);
+			auto exported_function = (PVOID)(image_base + address_of_functions[index]);
+			TRACE("Found exported function (%hs): 0x%08x", export_name.c_str(), exported_function);
+			return exported_function;
 		}
 	}
 	
