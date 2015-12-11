@@ -110,7 +110,8 @@ auto allocate_and_copy_sections(const vector<byte>& dll_buffer) {
 	// Reserve memory for the entire image
 	auto pe_header = get_pe_header_pointer(dll_buffer);
 	VirtualMemoryPtr base_address(VirtualAlloc(
-		NULL, // Will always relocate
+		// NULL, // Will always relocate
+		(PVOID)0x02000000,
 		pe_header->OptionalHeader.SizeOfImage,
 		MEM_RESERVE,
 		PAGE_READWRITE));
@@ -269,6 +270,10 @@ void resolve_imports(const vector<byte>& dll_buffer, VirtualMemoryPtr& base_memo
 	TRACE("Done resolving imports\n");
 }
 
+#define IS_SECTION_READ(section) (section->Characteristics & IMAGE_SCN_MEM_READ)
+#define IS_SECTION_WRITE(section) (section->Characteristics & IMAGE_SCN_MEM_WRITE)
+#define IS_SECTION_EXECUTE(section) (section->Characteristics & IMAGE_SCN_MEM_EXECUTE)
+
 void fixup_sections(const vector<byte>& dll_buffer, VirtualMemoryPtr& base_memory) {
 	TRACE("Starting to fix sections protection...");
 
@@ -285,7 +290,25 @@ void fixup_sections(const vector<byte>& dll_buffer, VirtualMemoryPtr& base_memor
 		auto section_size = get_actual_section_size(pe_header, section);
 		if (section_size > 0) {
 			auto section_address = (LPVOID)(image_base + section->VirtualAddress);
+			/*if (section->Characteristics & IMAGE_SCN_MEM_DISCARDABLE) {
+				VirtualFree(section_address, section_size, MEM_DECOMMIT);
+				continue;
+			}*/
 
+			DWORD new_protection = PAGE_NOACCESS;
+			if (IS_SECTION_READ(section) && IS_SECTION_WRITE(section) && IS_SECTION_EXECUTE(section)) {
+				new_protection = PAGE_EXECUTE_READWRITE;
+			}
+			else if (IS_SECTION_READ(section) && IS_SECTION_WRITE(section)) {
+				new_protection = PAGE_READWRITE;
+			}
+			else if (IS_SECTION_READ(section) && IS_SECTION_EXECUTE(section)) {
+				new_protection = PAGE_EXECUTE_READ;
+			}
+			else if (IS_SECTION_READ(section)) {
+				new_protection = PAGE_READONLY;
+			}
+			
 			// TODO: Need to map 
 			//		IMAGE_SCN_MEM_EXECUTE, IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_WRITE
 			// Into:
@@ -298,9 +321,8 @@ void fixup_sections(const vector<byte>& dll_buffer, VirtualMemoryPtr& base_memor
 			//		PAGE_EXECUTE_READ
 			//		PAGE_EXECUTE_READWRITE
 			// For now, we'll just give all permissions and hope for the best
-
-			TRACE("%hs -> Setting section protection. 0x%x:%04x", get_section_name(section).c_str(), section_address, section_size);
-			DWORD new_protection = PAGE_EXECUTE_READWRITE;
+			
+			TRACE("%hs -> Setting section protection. 0x%08x:%04x (new_protection=0x%08x)", get_section_name(section).c_str(), section_address, section_size, new_protection);
 			DWORD previous_protection = 0;
 			if (!VirtualProtect(
 				section_address,
@@ -323,6 +345,7 @@ void call_dllmain(const vector<byte>& dll_buffer, VirtualMemoryPtr& base_memory)
 	auto image_base = (PBYTE)base_memory.get();
 
 	DllEntryProc entry = (DllEntryProc)(image_base + pe_header->OptionalHeader.AddressOfEntryPoint);
+	TRACE("DllMain 0x%08x", entry);
 	(*entry)((HINSTANCE)image_base, DLL_PROCESS_ATTACH, 0);
 
 	TRACE("DllMain call completed");
