@@ -1,7 +1,8 @@
 #include <memory>
+#include <functional>
 #include <ctime>
-#include "common/common.h"
 #include <Windows.h>
+#include "common/common.h"
 
 static const DWORD PE_HEADER_MAGIC = 0x00004550;
 static const size_t PE_TIMESTAMP_CTIME_FORMAT_MAX_BUFFER_SIZE = 150;
@@ -122,7 +123,7 @@ auto allocate_and_copy_sections(const vector<byte>& dll_buffer) {
 	}
 	TRACE("Image Memory Reserved: Got 0x%x:%x", base_address.get(), pe_header->OptionalHeader.SizeOfImage);
 	
-	// Commit and copy memory for PE Headers, since they are needed for export resolving later on, when we get rid of dll_buffer
+	// Commit and copy memory for PE Headers, since they are needed for everything, and even after we get rid of dll_buffer (for get_proc_address)
 	allocate_and_copy_headers(dll_buffer, base_address);
 	
 	// Commit each section, and copy it
@@ -338,19 +339,38 @@ void call_dllmain(VirtualMemoryPtr& base_memory) {
 	TRACE("DllMain call completed");
 }
 
+// TODO: This function gets function by NAME. if we want to get the function by ordinal,
+//		 we will need to write a seperate function to iterate over address_of_name_ordinals only???
+// TODO: Getting functions by ordinal isn't complex. I think:
+//	"auto index_to_function_table = ordinal - export_table->Base;"
+//       should work...
+
 auto get_proc_address(VirtualMemoryPtr& base_memory, const string& export_name) {
 	TRACE("Starting to resolve exports...");
 
-	auto pe_header = (PIMAGE_NT_HEADERS32)((PBYTE)(base_memory.get()) + ((PIMAGE_DOS_HEADER)(base_memory.get()))->e_lfanew);
-	return pe_header;
-	/*auto pe_header = get_pe_header_pointer();
+	auto pe_header = get_pe_header_pointer(base_memory);
 	auto image_base = (PBYTE)base_memory.get();
-	auto import_table_data_directory = (PIMAGE_DATA_DIRECTORY)(&(pe_header->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT]));
-	auto table_start = (PBYTE)image_base + import_table_data_directory->VirtualAddress;
-	auto table_end = table_start + import_table_data_directory->Size;
-	TRACE("Found import table 0x%x<->0x%x (0x%x)", table_start, table_end, import_table_data_directory->Size);*/
-}
+	auto export_table_data_directory = (PIMAGE_DATA_DIRECTORY)(&(pe_header->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT]));
+	auto table_start = (PBYTE)image_base + export_table_data_directory->VirtualAddress;
+	auto export_table = (PIMAGE_EXPORT_DIRECTORY)table_start;
+	TRACE("Found export table 0x%x:%04x", export_table, export_table_data_directory->Size);
+	TRACE("Export table timestamp: %hs", format_timestamp(export_table->TimeDateStamp).c_str());
 
+	auto address_of_names = (PDWORD)((PBYTE)image_base + export_table->AddressOfNames);
+	auto address_of_name_ordinals = (PWORD)((PBYTE)image_base + export_table->AddressOfNameOrdinals);
+	auto address_of_functions = (PDWORD)((PBYTE)image_base + export_table->AddressOfFunctions);
+	
+	for (size_t i = 0; i < export_table->NumberOfNames; ++i) {
+		auto name = string((const char *)(image_base + address_of_names[i]));
+		if (0 == name.compare(export_name)) {
+			auto index = address_of_name_ordinals[i];
+			return (PVOID)(image_base + address_of_functions[index]);
+		}
+	}
+	
+	TRACE_AND_THROW(ExportedFunctionNotFound, "Could not find exported function %hs", export_name.c_str());
+}
+typedef int(*FuncType)();
 int main(int argc, char *argv[]) {
 	try {
 		// 1. Get Buffer of DLL Check DOSHeader, PEHeader
@@ -384,7 +404,10 @@ int main(int argc, char *argv[]) {
 		call_dllmain(base_memory);
 
 		// Now dll is loaded, lets find exports
-		auto exported_function = get_proc_address(base_memory, "DllExport3");
+		auto exported_function = get_proc_address(base_memory, "Func");
+		((FuncType)(exported_function))();
+		exported_function = get_proc_address(base_memory, "Func3");
+		((FuncType)(exported_function))();
 
 	}
 	catch (const CommonException&) {

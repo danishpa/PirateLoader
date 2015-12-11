@@ -27,6 +27,7 @@ DECLARE_EXCEPTION(ImportForwardingNotImplementedException, CommonException);
 DECLARE_EXCEPTION(LoadLibraryFailedException, CommonException);
 DECLARE_EXCEPTION(GetProcAddressFailedException, CommonException);
 DECLARE_EXCEPTION(VirtualProtectFailedException, CommonException);
+DECLARE_EXCEPTION(ExportedFunctionNotFound, CommonException);
 
 #define TRACE_AND_THROW(exception_type, msg, ...) \
 {												\

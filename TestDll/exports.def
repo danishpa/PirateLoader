@@ -1,4 +1,4 @@
 EXPORTS 
 	Func=DllExport
-	Func2=DllExport2 @100
+	DllExport2 @160 NONAME
 	Func3=DllExport3 @101
