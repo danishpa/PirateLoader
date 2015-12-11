@@ -27,6 +27,7 @@
     <ClInclude Include="common\handles.hpp" />
     <ClInclude Include="common\logging\logging.hpp" />
     <ClInclude Include="common\types.h" />
+    <ClInclude Include="main.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{870C3B65-8738-4E80-B610-C73F1AC2393B}</ProjectGuid>

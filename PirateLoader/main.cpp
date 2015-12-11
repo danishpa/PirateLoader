@@ -53,6 +53,10 @@ auto get_pe_header_pointer(const vector<byte>& dll_buffer) {
 	return (PIMAGE_NT_HEADERS32)(dll_buffer.data() + ((PIMAGE_DOS_HEADER)(dll_buffer.data()))->e_lfanew);
 }
 
+auto get_pe_header_pointer(const VirtualMemoryPtr& memory) {
+	return (PIMAGE_NT_HEADERS32)((PBYTE)(memory.get()) + ((PIMAGE_DOS_HEADER)(memory.get()))->e_lfanew);
+}
+
 auto format_timestamp(DWORD raw_timestamp) {
 	auto timestamp = static_cast<__time32_t>(raw_timestamp);
 	vector<byte> timestamp_string(PE_TIMESTAMP_CTIME_FORMAT_MAX_BUFFER_SIZE, 0);
@@ -86,6 +90,25 @@ auto get_section_name(const PIMAGE_SECTION_HEADER& section_header) {
 	return section_name;
 }
 
+auto allocate_and_copy_headers(const vector<byte>& dll_buffer, VirtualMemoryPtr& base_memory) {
+	TRACE("Commiting memory for headers");
+
+	auto dos_headers_size = ((PIMAGE_DOS_HEADER)(dll_buffer.data()))->e_lfanew;
+	auto section_headers_size = get_pe_header_pointer(dll_buffer)->FileHeader.NumberOfSections * sizeof(IMAGE_SECTION_HEADER);
+	auto total_size = dos_headers_size + sizeof(IMAGE_NT_HEADERS32) + section_headers_size;
+
+	LPVOID headers = VirtualAlloc(
+		base_memory.get(),
+		total_size,
+		MEM_COMMIT,
+		PAGE_READWRITE);
+	if (NULL == headers) {
+		TRACE_AND_THROW_WINAPI(VirtualAllocFailedException, VirtualAlloc);
+	}
+	CopyMemory(headers, (LPVOID)(dll_buffer.data()), total_size);
+
+}
+
 auto allocate_and_copy_sections(const vector<byte>& dll_buffer) {
 	// Reserve memory for the entire image
 	auto pe_header = get_pe_header_pointer(dll_buffer);
@@ -98,6 +121,10 @@ auto allocate_and_copy_sections(const vector<byte>& dll_buffer) {
 		TRACE_AND_THROW_WINAPI(VirtualAllocFailedException, VirtualAlloc);
 	}
 	TRACE("Image Memory Reserved: Got 0x%x:%x", base_address.get(), pe_header->OptionalHeader.SizeOfImage);
+	
+	// Commit and copy memory for PE Headers, since they are needed for export resolving later on, when we get rid of dll_buffer
+	allocate_and_copy_headers(dll_buffer, base_address);
+	
 	// Commit each section, and copy it
 	auto first_section = get_first_section(pe_header);
 
@@ -132,10 +159,10 @@ auto allocate_and_copy_sections(const vector<byte>& dll_buffer) {
 	return std::move(base_address);
 }
 
-void perform_base_relocations(const vector<byte>& dll_buffer, VirtualMemoryPtr& base_memory) {
+void perform_base_relocations(VirtualMemoryPtr& base_memory) {
 	TRACE("Starting address base relocations...")
 
-	auto pe_header = get_pe_header_pointer(dll_buffer);
+	auto pe_header = get_pe_header_pointer(base_memory);
 	auto image_base = (PBYTE)base_memory.get();
 	auto expected_image_base = pe_header->OptionalHeader.ImageBase;
 	TRACE("ActualImageBase=0x%x, ExpectedImageBase=0x%x", image_base, expected_image_base);
@@ -182,10 +209,10 @@ void perform_base_relocations(const vector<byte>& dll_buffer, VirtualMemoryPtr& 
 	TRACE("Base relocations Done\n");
 }
 
-void resolve_imports(const vector<byte>& dll_buffer, VirtualMemoryPtr& base_memory) {
+void resolve_imports(VirtualMemoryPtr& base_memory) {
 	TRACE("Starting to resolve imports...");
 
-	auto pe_header = get_pe_header_pointer(dll_buffer);
+	auto pe_header = get_pe_header_pointer(base_memory);
 	auto image_base = (PBYTE)base_memory.get();
 	auto import_table_data_directory = (PIMAGE_DATA_DIRECTORY)(&(pe_header->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT]));
 	auto table_start = (PBYTE)image_base + import_table_data_directory->VirtualAddress;
@@ -262,10 +289,10 @@ auto get_new_section_protection(const PIMAGE_SECTION_HEADER& section) {
 	return PAGE_NOACCESS;
 }
 
-void fixup_sections(const vector<byte>& dll_buffer, VirtualMemoryPtr& base_memory) {
+void fixup_sections(VirtualMemoryPtr& base_memory) {
 	TRACE("Starting to fix sections protection...");
 
-	auto pe_header = get_pe_header_pointer(dll_buffer);
+	auto pe_header = get_pe_header_pointer(base_memory);
 	auto image_base = (PBYTE)base_memory.get();
 	auto first_section = get_first_section(pe_header);
 
@@ -298,10 +325,10 @@ void fixup_sections(const vector<byte>& dll_buffer, VirtualMemoryPtr& base_memor
 
 typedef BOOL(WINAPI *DllEntryProc)(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved);
 
-void call_dllmain(const vector<byte>& dll_buffer, VirtualMemoryPtr& base_memory) {
+void call_dllmain(VirtualMemoryPtr& base_memory) {
 	TRACE("Starting DllMain Call...");
 
-	auto pe_header = get_pe_header_pointer(dll_buffer);
+	auto pe_header = get_pe_header_pointer(base_memory);
 	auto image_base = (PBYTE)base_memory.get();
 
 	DllEntryProc entry = (DllEntryProc)(image_base + pe_header->OptionalHeader.AddressOfEntryPoint);
@@ -309,6 +336,19 @@ void call_dllmain(const vector<byte>& dll_buffer, VirtualMemoryPtr& base_memory)
 	(*entry)((HINSTANCE)image_base, DLL_PROCESS_ATTACH, 0);
 
 	TRACE("DllMain call completed");
+}
+
+auto get_proc_address(VirtualMemoryPtr& base_memory, const string& export_name) {
+	TRACE("Starting to resolve exports...");
+
+	auto pe_header = (PIMAGE_NT_HEADERS32)((PBYTE)(base_memory.get()) + ((PIMAGE_DOS_HEADER)(base_memory.get()))->e_lfanew);
+	return pe_header;
+	/*auto pe_header = get_pe_header_pointer();
+	auto image_base = (PBYTE)base_memory.get();
+	auto import_table_data_directory = (PIMAGE_DATA_DIRECTORY)(&(pe_header->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT]));
+	auto table_start = (PBYTE)image_base + import_table_data_directory->VirtualAddress;
+	auto table_end = table_start + import_table_data_directory->Size;
+	TRACE("Found import table 0x%x<->0x%x (0x%x)", table_start, table_end, import_table_data_directory->Size);*/
 }
 
 int main(int argc, char *argv[]) {
@@ -332,16 +372,19 @@ int main(int argc, char *argv[]) {
 		auto base_memory = allocate_and_copy_sections(dll_buffer);
 
 		// Step 4
-		perform_base_relocations(dll_buffer, base_memory);
+		perform_base_relocations(base_memory);
 
 		// Step 5
-		resolve_imports(dll_buffer, base_memory);
+		resolve_imports(base_memory);
 
 		// Step 6
-		fixup_sections(dll_buffer, base_memory);
+		fixup_sections(base_memory);
 
 		// Step 7
-		call_dllmain(dll_buffer, base_memory);
+		call_dllmain(base_memory);
+
+		// Now dll is loaded, lets find exports
+		auto exported_function = get_proc_address(base_memory, "DllExport3");
 
 	}
 	catch (const CommonException&) {

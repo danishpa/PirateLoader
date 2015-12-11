@@ -28,5 +28,8 @@
     <ClInclude Include="common\handles.hpp">
       <Filter>common</Filter>
     </ClInclude>
+    <ClInclude Include="main.h">
+      <Filter>common</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
