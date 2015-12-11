@@ -28,13 +28,13 @@ DECLARE_EXCEPTION(LoadLibraryFailedException, CommonException);
 DECLARE_EXCEPTION(GetProcAddressFailedException, CommonException);
 DECLARE_EXCEPTION(VirtualProtectFailedException, CommonException);
 
-#define LOG_AND_THROW(exception_type, msg, ...) \
+#define TRACE_AND_THROW(exception_type, msg, ...) \
 {												\
 	TRACE(msg, __VA_ARGS__);					\
 	throw exception_type();						\
 }
 
-#define LOG_AND_THROW_WINAPI(exception_type, winapi_func)	\
+#define TRACE_AND_THROW_WINAPI(exception_type, winapi_func)	\
 {															\
 	TRACE(#winapi_func " Failed. GLE=%lu", GetLastError());	\
 	throw exception_type();									\

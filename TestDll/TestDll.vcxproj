@@ -93,6 +93,8 @@
     </ClCompile>
     <Link>
       <ModuleDefinitionFile>$(ProjectDir)exports.def</ModuleDefinitionFile>
+      <BaseAddress>
+      </BaseAddress>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -104,6 +106,8 @@
     </ClCompile>
     <Link>
       <ModuleDefinitionFile>$(ProjectDir)exports.def</ModuleDefinitionFile>
+      <BaseAddress>
+      </BaseAddress>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
