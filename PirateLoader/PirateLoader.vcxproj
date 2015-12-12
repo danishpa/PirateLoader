@@ -19,7 +19,10 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="dllloader.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="module.cpp" />
+    <ClCompile Include="peutils.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="common\common.h" />
@@ -27,7 +30,9 @@
     <ClInclude Include="common\handles.hpp" />
     <ClInclude Include="common\logging\logging.hpp" />
     <ClInclude Include="common\types.h" />
-    <ClInclude Include="main.h" />
+    <ClInclude Include="dllloader.h" />
+    <ClInclude Include="module.h" />
+    <ClInclude Include="peutils.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{870C3B65-8738-4E80-B610-C73F1AC2393B}</ProjectGuid>

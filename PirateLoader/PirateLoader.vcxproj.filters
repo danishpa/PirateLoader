@@ -8,9 +8,27 @@
     <Filter Include="common\logging">
       <UniqueIdentifier>{55733e1f-b3b3-43e7-91e5-3f2f53ba028c}</UniqueIdentifier>
     </Filter>
+    <Filter Include="dllloader">
+      <UniqueIdentifier>{5f5fdbf8-fc0e-4f8e-8ee2-62b578858220}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dllloader\module">
+      <UniqueIdentifier>{17247711-8fc2-4b7d-910d-deb9e25bbcfd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dllloader\peutils">
+      <UniqueIdentifier>{fa1458d8-cee6-4ac0-80b0-9c3864b803ee}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="module.cpp">
+      <Filter>dllloader\module</Filter>
+    </ClCompile>
+    <ClCompile Include="dllloader.cpp">
+      <Filter>dllloader</Filter>
+    </ClCompile>
+    <ClCompile Include="peutils.cpp">
+      <Filter>dllloader\peutils</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="common\common.h">
@@ -28,8 +46,14 @@
     <ClInclude Include="common\handles.hpp">
       <Filter>common</Filter>
     </ClInclude>
-    <ClInclude Include="main.h">
-      <Filter>common</Filter>
+    <ClInclude Include="module.h">
+      <Filter>dllloader\module</Filter>
+    </ClInclude>
+    <ClInclude Include="dllloader.h">
+      <Filter>dllloader</Filter>
+    </ClInclude>
+    <ClInclude Include="peutils.h">
+      <Filter>dllloader\peutils</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
