@@ -22,10 +22,11 @@ namespace dllloader {
 		virtual ~Module();
 
 		DllExportedFunction get_proc_address(const string& export_name);
+		string get_module_name();
 
 	private:
-		
-		auto get_new_section_protection(const PIMAGE_SECTION_HEADER& section);
+		VirtualMemoryPtr m_base_memory;
+		string m_name;
 
 		void allocate_and_copy_headers(const vector<byte>& dll_buffer);
 		void allocate_and_copy_sections(const vector<byte>& dll_buffer);
@@ -33,10 +34,6 @@ namespace dllloader {
 		void resolve_imports();
 		void fixup_sections();
 		void call_dllmain(DWORD reason);
-		string get_module_name();
-
-		VirtualMemoryPtr m_base_memory;
-		string m_name;
 	};
 
 }

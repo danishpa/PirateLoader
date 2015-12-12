@@ -25,6 +25,8 @@ namespace peutils {
 
 	string get_section_name(const PIMAGE_SECTION_HEADER& section_header);
 
+	DWORD get_page_protection(const PIMAGE_SECTION_HEADER& section);
+
 	vector<byte> get_dll_buffer(const string& path);
 
 }

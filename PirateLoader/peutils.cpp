@@ -70,6 +70,21 @@ namespace peutils {
 		return section_name;
 	}
 
+	DWORD get_page_protection(const PIMAGE_SECTION_HEADER& section) {
+		auto characteristics = section->Characteristics;
+		if (characteristics & IMAGE_SCN_MEM_EXECUTE) {
+			return  PAGE_EXECUTE_READ;
+		}
+		else if ((characteristics & IMAGE_SCN_MEM_READ) && (characteristics & IMAGE_SCN_MEM_WRITE)) {
+			return PAGE_READWRITE;
+		}
+		else if (characteristics & IMAGE_SCN_MEM_READ) {
+			return PAGE_READONLY;
+		}
+
+		return PAGE_NOACCESS;
+	}
+
 	vector<byte> get_dll_buffer(const string& path) {
 		// Open dll
 		FileHandle handle(CreateFile(path.c_str(), FILE_READ_ACCESS, FILE_SHARE_READ | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL));

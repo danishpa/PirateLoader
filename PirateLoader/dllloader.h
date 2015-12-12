@@ -21,7 +21,7 @@ namespace dllloader {
 	public:
 		virtual ~DllLoader();
 
-		shared_ptr<Module> load(vector<byte> dll_buffer, string name = "");
+		shared_ptr<Module> load(vector<byte> dll_buffer);
 		
 		void free(string name);
 		void free(shared_ptr<Module> module);
