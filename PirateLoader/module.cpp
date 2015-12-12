@@ -1,4 +1,5 @@
 #include <vector>
+#include <algorithm>
 #include <string>
 #include <windows.h>
 #include "module.h"
@@ -86,7 +87,7 @@ namespace dllloader {
 			}
 		}
 
-		TRACE_AND_THROW(ExportedFunctionNotFound, "Could not find exported function %hs", export_name.c_str());
+		TRACE_AND_THROW(ExportedFunctionNotFoundException, "Could not find exported function %hs", export_name.c_str());
 	}
 
 	string Module::get_module_name() {
@@ -94,14 +95,14 @@ namespace dllloader {
 			return m_name;
 		}
 
-		TRACE("Getting module name...")
-
-			auto pe_header = get_pe_header_pointer(m_base_memory);
+		TRACE("Getting module name...");
+		auto pe_header = get_pe_header_pointer(m_base_memory);
 		auto image_base = (PBYTE)m_base_memory.get();
 		auto export_table_data_directory = (PIMAGE_DATA_DIRECTORY)(&(pe_header->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT]));
 		auto export_table = (PIMAGE_EXPORT_DIRECTORY)(image_base + export_table_data_directory->VirtualAddress);
 
 		m_name = string((const char *)(image_base + export_table->Name));
+		//transform(m_name.begin(), m_name.end(), m_name.begin(), toupper);
 		TRACE("Got module name %hs", m_name.c_str());
 		return m_name;
 	}

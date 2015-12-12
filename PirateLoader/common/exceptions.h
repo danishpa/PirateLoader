@@ -27,7 +27,10 @@ DECLARE_EXCEPTION(ImportForwardingNotImplementedException, CommonException);
 DECLARE_EXCEPTION(LoadLibraryFailedException, CommonException);
 DECLARE_EXCEPTION(GetProcAddressFailedException, CommonException);
 DECLARE_EXCEPTION(VirtualProtectFailedException, CommonException);
-DECLARE_EXCEPTION(ExportedFunctionNotFound, CommonException);
+DECLARE_EXCEPTION(ExportedFunctionNotFoundException, CommonException);
+DECLARE_EXCEPTION(GetCurrentDirectoryFailedException, CommonException);
+DECLARE_EXCEPTION(PathAppendFailedException, CommonException);
+DECLARE_EXCEPTION(PathFindOnPathFailedException, CommonException);
 
 #define TRACE_AND_THROW(exception_type, msg, ...) \
 {												\

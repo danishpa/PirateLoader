@@ -16,12 +16,12 @@ int main(int argc, char *argv[]) {
 		auto dll_buffer = get_dll_buffer(argv[1]);
 		display_pe_header_statistics(get_pe_header_pointer(dll_buffer));
 
-		Module m(dll_buffer);
+		auto m = DllLoader::get().load(dll_buffer);
 
 		// Now dll is loaded, lets find exports
-		auto exported_function = m.get_proc_address("Func");
+		auto exported_function = m->get_proc_address("Func");
 		((FuncType)(exported_function))();
-		exported_function = m.get_proc_address("Func3");
+		exported_function = m->get_proc_address("Func3");
 		((FuncType)(exported_function))();
 
 	}

@@ -16,16 +16,17 @@ using std::vector;
 namespace pirateloader {
 namespace dllloader {
 
-	class DllLoader
-	{
+	class DllLoader {
 	public:
 		virtual ~DllLoader();
 
-		shared_ptr<Module> load(vector<byte> dll_buffer);
+		static DllLoader& get();
+
+		shared_ptr<Module> load(string name);
+		shared_ptr<Module> load(vector<byte> dll_buffer, string name = "");
 		
 		void free(string name);
 		void free(shared_ptr<Module> module);
-
 
 		DllLoader(const DllLoader& other) = delete;
 		DllLoader& operator=(const DllLoader& other) = delete;
@@ -34,8 +35,10 @@ namespace dllloader {
 		// private ctor -> Singleton
 		DllLoader();
 
-		map<string, shared_ptr<Module>> m_loaded_modules;
+		string search_dll_path(string name);
+		string get_uniform_dll_name(string name);
 
+		map<string, shared_ptr<Module>> m_loaded_modules;
 		static DllLoader sm_loader;
 	};
 
