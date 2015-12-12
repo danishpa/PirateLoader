@@ -16,7 +16,7 @@ int main(int argc, char *argv[]) {
 		auto dll_buffer = get_dll_buffer(argv[1]);
 		display_pe_header_statistics(get_pe_header_pointer(dll_buffer));
 
-		Module m("MyDll", dll_buffer);
+		Module m(dll_buffer);
 
 		// Now dll is loaded, lets find exports
 		auto exported_function = m.get_proc_address("Func");

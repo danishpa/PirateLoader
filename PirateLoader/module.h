@@ -18,7 +18,7 @@ namespace dllloader {
 	class Module {
 
 	public:
-		Module(const string& name, const vector<byte>& dll_buffer);
+		Module(const vector<byte>& dll_buffer);
 		virtual ~Module();
 
 		DllExportedFunction get_proc_address(const string& export_name);
@@ -33,7 +33,8 @@ namespace dllloader {
 		void resolve_imports();
 		void fixup_sections();
 		void call_dllmain(DWORD reason);
-		
+		string get_module_name();
+
 		VirtualMemoryPtr m_base_memory;
 		string m_name;
 	};
