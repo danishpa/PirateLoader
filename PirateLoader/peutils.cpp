@@ -11,32 +11,49 @@ using std::string;
 
 namespace pirateloader {
 namespace peutils {
-
+	
 	static const DWORD PE_HEADER_MAGIC = 0x00004550;
 	static const size_t PE_TIMESTAMP_CTIME_FORMAT_MAX_BUFFER_SIZE = 150;
 
-	void verify_dll_magic(const vector<byte>& buffer) {
-		if (buffer.size() < 2) {
-			TRACE_AND_THROW(DllMagicException, "Dll is too small to contain magic (size=%lu)", buffer.size());
+#ifdef _WIN64
+	static const WORD EXPECTED_MACHINE_VERSION = IMAGE_FILE_MACHINE_AMD64;
+#else
+	static const WORD EXPECTED_MACHINE_VERSION = IMAGE_FILE_MACHINE_I386;
+#endif
+
+	void verify_pe(const vector<byte>& buffer) {
+		if (buffer.size() < sizeof(IMAGE_DOS_HEADER) + sizeof(IMAGE_FILE_HEADER) + sizeof(IMAGE_OPTIONAL_HEADER)) {
+			TRACE_AND_THROW(DllMagicException, "Buffer is too small to be a dll (size=%lu)", buffer.size());
 		}
 
-		if (buffer[0] != 'M' || buffer[1] != 'Z') {
-			TRACE_AND_THROW(DllMagicException, "Dll magic MZ does not appear! (actual=%02x%02x)", buffer[0], buffer[1]);
+		auto magic = ((PIMAGE_DOS_HEADER)(buffer.data()))->e_magic;
+		if (IMAGE_DOS_SIGNATURE != magic) {
+			TRACE_AND_THROW(DllMagicException, "Dll magic MZ does not appear! (actual=%hu)", magic);
 		}
 
-		TRACE("Dll Magic Verified")
+		auto pe_header = get_pe_header_pointer(buffer);
+		if (PE_HEADER_MAGIC != pe_header->Signature) {
+			TRACE_AND_THROW(PEMagicException, "PE Magic mismatch (expected=0x%x, actual=0x%x)", PE_HEADER_MAGIC, pe_header->Signature);
+		}
+
+		// Check architecture
+		if (EXPECTED_MACHINE_VERSION != pe_header->FileHeader.Machine) {
+			TRACE_AND_THROW(ArchitectureException, "Architecure mismatch (expected=%lu, actual=%lu)", EXPECTED_MACHINE_VERSION, pe_header->FileHeader.Machine);
+		}
+
+		TRACE("Dll Magic and Architecture verified")
 	}
 
-	PIMAGE_NT_HEADERS32 get_pe_header_pointer(HMODULE module) {
-		return (PIMAGE_NT_HEADERS32)((PBYTE)(module) + ((PIMAGE_DOS_HEADER)(module))->e_lfanew);
+	PIMAGE_NT_HEADERS get_pe_header_pointer(HMODULE module) {
+		return (PIMAGE_NT_HEADERS)((PBYTE)(module) + ((PIMAGE_DOS_HEADER)(module))->e_lfanew);
 	}
 	
-	PIMAGE_NT_HEADERS32 get_pe_header_pointer(const VirtualMemoryPtr& memory) {
+	PIMAGE_NT_HEADERS get_pe_header_pointer(const VirtualMemoryPtr& memory) {
 		return get_pe_header_pointer((HMODULE)memory.get());
 	}
 
-	PIMAGE_NT_HEADERS32 get_pe_header_pointer(const vector<byte>& dll_buffer) {
-		return (PIMAGE_NT_HEADERS32)(dll_buffer.data() + ((PIMAGE_DOS_HEADER)(dll_buffer.data()))->e_lfanew);
+	PIMAGE_NT_HEADERS get_pe_header_pointer(const vector<byte>& dll_buffer) {
+		return (PIMAGE_NT_HEADERS)(dll_buffer.data() + ((PIMAGE_DOS_HEADER)(dll_buffer.data()))->e_lfanew);
 	}
 
 	string format_timestamp(DWORD raw_timestamp) {
@@ -116,7 +133,6 @@ namespace peutils {
 			TRACE_AND_THROW(ReadFileSizeMismatchException, "FileRead did not read expected byte count (expected=%lu, read=%lu)", buffer.size(), bytes_read);
 		}
 
-		verify_dll_magic(buffer);
 		return std::move(buffer);
 	}
 

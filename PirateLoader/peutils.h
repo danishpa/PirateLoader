@@ -11,7 +11,7 @@ using std::string;
 namespace pirateloader {
 namespace peutils {
 
-	void verify_dll_magic(const vector<byte>& buffer);
+	void verify_pe(const vector<byte>& buffer);
 
 	PIMAGE_NT_HEADERS32 get_pe_header_pointer(HMODULE module);
 

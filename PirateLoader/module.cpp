@@ -17,6 +17,7 @@ namespace dllloader {
 
 	Module::Module(const vector<byte>& dll_buffer) {
 		// Step 1 - Check DOSHeader, PEHeader
+		verify_pe(dll_buffer);
 
 		// Step 2 - Try to allocate a memory block of PEHeader.OptionalHeader.SizeOfImage bytes (We are always randoming the position instead of using PEHeader.OptionalHeader.ImageBase)
 		// Step 3 - Parse section headers and copy sections to their addresses.
