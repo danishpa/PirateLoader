@@ -48,10 +48,6 @@ namespace dllloader {
 		try {
 			TRACE("Freeing dll %hs", m_name.c_str());
 
-			if (valid(m_base_memory)) {
-
-			}
-
 			call_dllmain(DLL_PROCESS_DETACH);
 		}
 		catch (...) {
@@ -114,7 +110,7 @@ namespace dllloader {
 
 		auto dos_headers_size = ((PIMAGE_DOS_HEADER)(dll_buffer.data()))->e_lfanew;
 		auto section_headers_size = get_pe_header_pointer(dll_buffer)->FileHeader.NumberOfSections * sizeof(IMAGE_SECTION_HEADER);
-		auto total_size = dos_headers_size + sizeof(IMAGE_NT_HEADERS32) + section_headers_size;
+		auto total_size = dos_headers_size + sizeof(IMAGE_NT_HEADERS) + section_headers_size;
 
 		LPVOID headers = VirtualAlloc(
 			m_base_memory.get(),
@@ -139,7 +135,7 @@ namespace dllloader {
 		if (invalid(m_base_memory)) {
 			TRACE_AND_THROW_WINAPI(VirtualAllocFailedException, VirtualAlloc);
 		}
-		TRACE("Image Memory Reserved: Got 0x%x:%x", m_base_memory.get(), pe_header->OptionalHeader.SizeOfImage);
+		TRACE("Image Memory Reserved: Got 0x%p:%x", m_base_memory.get(), pe_header->OptionalHeader.SizeOfImage);
 
 		// Commit and copy memory for PE Headers, since they are needed for everything, and even after we get rid of dll_buffer (for get_proc_address)
 		allocate_and_copy_headers(dll_buffer);
@@ -155,7 +151,7 @@ namespace dllloader {
 			// If size_to_commit is bigger than 0, commit the memory. if it isn't, don't.
 			if (size_to_commit > 0) {
 				auto virtual_address_for_section = (LPVOID)((const PBYTE)m_base_memory.get() + section->VirtualAddress);
-				//TRACE("Commiting memory for section %hs -> 0x%x:%04x...", get_section_name(section).c_str(), virtual_address_for_section, size_to_commit);
+				//TRACE("Commiting memory for section %hs -> 0x%p:%04x...", get_section_name(section).c_str(), virtual_address_for_section, size_to_commit);
 				LPVOID section_memory = VirtualAlloc(
 					virtual_address_for_section,
 					size_to_commit,
@@ -174,21 +170,21 @@ namespace dllloader {
 	void Module::perform_base_relocations() {
 		TRACE("Starting address base relocations...")
 
-			auto pe_header = get_pe_header_pointer(m_base_memory);
+		auto pe_header = get_pe_header_pointer(m_base_memory);
 		auto image_base = (PBYTE)m_base_memory.get();
 		auto expected_image_base = pe_header->OptionalHeader.ImageBase;
-		TRACE("ActualImageBase=0x%x, ExpectedImageBase=0x%x", image_base, expected_image_base);
+		TRACE("ActualImageBase=0x%p, ExpectedImageBase=0x%p", image_base, expected_image_base);
 
 		auto relocation_table_data_directory = (PIMAGE_DATA_DIRECTORY)(&(pe_header->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC]));
 		auto table_start = image_base + relocation_table_data_directory->VirtualAddress;
 		auto table_end = table_start + relocation_table_data_directory->Size;
-		TRACE("Found Relocation table 0x%x<->0x%x (0x%x)", table_start, table_end, relocation_table_data_directory->Size);
+		TRACE("Found Relocation table 0x%p<->0x%p (0x%x)", table_start, table_end, relocation_table_data_directory->Size);
 
 		auto block = (PIMAGE_BASE_RELOCATION)table_start;
 		while ((PBYTE)(block) < table_end) {
-			//TRACE("RelocationBlock [0x%x]: VirtualAddress=0x%x, SizeOfBlock=0x%x", block, block->VirtualAddress, block->SizeOfBlock);
+			TRACE("RelocationBlock [0x%x]: VirtualAddress=0x%x, SizeOfBlock=0x%x", block, block->VirtualAddress, block->SizeOfBlock);
 
-			// Some nasty pointer arithmatic.
+			// Some nasty pointer arithmetic.
 			// We start at the block, right after the VA+SizeOfBlock descriptor, and continue until the end of the block
 			auto block_end = (PBYTE)(block)+block->SizeOfBlock;
 			auto block_data = (PBYTE)(block)+sizeof(IMAGE_BASE_RELOCATION);
@@ -209,6 +205,11 @@ namespace dllloader {
 					*address_to_relocated_value = new_va;
 					//TRACE("[0x%08x] expected_va=0x%x -> new_va=0x%x", address_to_relocated_value, expected_va, new_va);
 				}
+#ifdef _WIN64
+				else if (IMAGE_REL_BASED_DIR64 == type) {
+					// TODO:
+				}
+#endif
 				// IMAGE_REL_BASED_ABSOLUTE is no op, the rest we can't handle...
 				else if (IMAGE_REL_BASED_ABSOLUTE != type) {
 					TRACE_AND_THROW(RelocationTypeUnkownException, "Cannot handle base relocation type %u", type);

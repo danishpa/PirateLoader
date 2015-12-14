@@ -70,7 +70,7 @@ namespace peutils {
 		return timestamp_string;
 	}
 
-	void display_pe_header_statistics(const PIMAGE_NT_HEADERS32& pe_header) {
+	void display_pe_header_statistics(const PIMAGE_NT_HEADERS& pe_header) {
 		if (PE_HEADER_MAGIC != pe_header->Signature) {
 			TRACE_AND_THROW(PEMagicException, "PE Magic mismatch (expected=0x%x, actual=0x%x)", PE_HEADER_MAGIC, pe_header->Signature);
 		}
@@ -81,7 +81,7 @@ namespace peutils {
 		cout << "\tOptionalHeaderSize: " << pe_header->FileHeader.SizeOfOptionalHeader << endl;
 	}
 
-	PIMAGE_SECTION_HEADER get_first_section(const PIMAGE_NT_HEADERS32& pe_header) {
+	PIMAGE_SECTION_HEADER get_first_section(const PIMAGE_NT_HEADERS& pe_header) {
 		return IMAGE_FIRST_SECTION(pe_header);
 	}
 

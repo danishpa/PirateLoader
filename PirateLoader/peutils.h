@@ -13,17 +13,17 @@ namespace peutils {
 
 	void verify_pe(const vector<byte>& buffer);
 
-	PIMAGE_NT_HEADERS32 get_pe_header_pointer(HMODULE module);
+	PIMAGE_NT_HEADERS get_pe_header_pointer(HMODULE module);
 
-	PIMAGE_NT_HEADERS32 get_pe_header_pointer(const VirtualMemoryPtr& memory);
+	PIMAGE_NT_HEADERS get_pe_header_pointer(const VirtualMemoryPtr& memory);
 
-	PIMAGE_NT_HEADERS32 get_pe_header_pointer(const vector<byte>& dll_buffer);
+	PIMAGE_NT_HEADERS get_pe_header_pointer(const vector<byte>& dll_buffer);
 
 	string format_timestamp(DWORD raw_timestamp);
 
-	void display_pe_header_statistics(const PIMAGE_NT_HEADERS32& pe_header);
+	void display_pe_header_statistics(const PIMAGE_NT_HEADERS& pe_header);
 
-	PIMAGE_SECTION_HEADER get_first_section(const PIMAGE_NT_HEADERS32& pe_header);
+	PIMAGE_SECTION_HEADER get_first_section(const PIMAGE_NT_HEADERS& pe_header);
 
 	string get_section_name(const PIMAGE_SECTION_HEADER& section_header);
 
