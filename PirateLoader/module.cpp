@@ -2,8 +2,9 @@
 #include <algorithm>
 #include <string>
 #include <windows.h>
-#include "module.h"
 #include "common\common.h"
+#include "module.h"
+#include "dllloader.h"
 #include "peutils.h"
 
 using std::vector;
@@ -153,7 +154,7 @@ namespace dllloader {
 			// If size_to_commit is bigger than 0, commit the memory. if it isn't, don't.
 			if (size_to_commit > 0) {
 				auto virtual_address_for_section = (LPVOID)((const PBYTE)m_base_memory.get() + section->VirtualAddress);
-				TRACE("Commiting memory for section %hs -> 0x%x:%04x...", get_section_name(section).c_str(), virtual_address_for_section, size_to_commit);
+				//TRACE("Commiting memory for section %hs -> 0x%x:%04x...", get_section_name(section).c_str(), virtual_address_for_section, size_to_commit);
 				LPVOID section_memory = VirtualAlloc(
 					virtual_address_for_section,
 					size_to_commit,
@@ -163,13 +164,8 @@ namespace dllloader {
 					TRACE_AND_THROW_WINAPI(VirtualAllocFailedException, VirtualAlloc);
 				}
 
-				TRACE("Copying section RawData...");
 				CopyMemory(section_memory, (LPVOID)(dll_buffer.data() + section->PointerToRawData), section->SizeOfRawData);
 			}
-			else {
-				TRACE("size_to_commit==0, will not MEM_COMMIT");
-			}
-			TRACE("Section Done.")
 		}
 		TRACE("All Sections Done.\n");
 	}
@@ -189,7 +185,7 @@ namespace dllloader {
 
 		auto block = (PIMAGE_BASE_RELOCATION)table_start;
 		while ((PBYTE)(block) < table_end) {
-			TRACE("RelocationBlock [0x%x]: VirtualAddress=0x%x, SizeOfBlock=0x%x", block, block->VirtualAddress, block->SizeOfBlock);
+			//TRACE("RelocationBlock [0x%x]: VirtualAddress=0x%x, SizeOfBlock=0x%x", block, block->VirtualAddress, block->SizeOfBlock);
 
 			// Some nasty pointer arithmatic.
 			// We start at the block, right after the VA+SizeOfBlock descriptor, and continue until the end of the block
@@ -263,21 +259,45 @@ namespace dllloader {
 			// TODO: In the final version, we shouldn't use LoadLibrary, GetProcAddress, etc., but use the pirateloader recursively to load the dependencies
 			//       Also, need to refcount the dll's and stuff
 
-			auto module = LoadLibraryA(module_name.c_str());
-			if (NULL == module) {
-				TRACE_AND_THROW_WINAPI(LoadLibraryFailedException, LoadLibraryA);
-			}
-			string pretty_module_name(module_name.begin(), module_name.end() - string(".dll").size());
 
+			// Choose how to load the dependency, based on whether or not it was already loaded into the process by the dll loader itself
+			// this is really just a way to get around importing the named windows API Sets from WinSxS for kernel32.dll
+
+			bool use_windows_loader = false;
+			auto windows_loaded_module = GetModuleHandle(module_name.c_str());
+			if (NULL != windows_loaded_module) {
+				TRACE("Found a module which was already loaded by windows: %hs", module_name.c_str());
+				// Reload it, to increase ref count
+				if (windows_loaded_module == LoadLibrary(module_name.c_str())) {
+					// Success
+					use_windows_loader = true;
+				} else {
+					TRACE("LoadLibrary Failed loading %hs (Weird.. err=%lu)", module_name.c_str(), GetLastError());
+				}
+			}
+
+			shared_ptr<Module> loaded_module_dependency;
+			if (!use_windows_loader) {
+				loaded_module_dependency = DllLoader::get().load(module_name);
+			}
+
+
+			string pretty_module_name(module_name.begin(), module_name.end() - string(".dll").size());
 			auto import_address_list = (PDWORD)(image_base + import_descriptor->FirstThunk);
 			auto import_name_list = (PDWORD)(image_base + import_descriptor->OriginalFirstThunk);
 
 			for (; *import_address_list && *import_name_list; import_address_list++, import_name_list++) {
 				auto name_data = (PIMAGE_IMPORT_BY_NAME)(image_base + *import_name_list);
-				TRACE("Importing %hs.%hs (Hint(Ordinal?)=%hu)", pretty_module_name.c_str(), name_data->Name, name_data->Hint);
+				//TRACE("Importing %hs.%hs (Hint(Ordinal?)=%hu)", pretty_module_name.c_str(), name_data->Name, name_data->Hint);
 
-				// TODO: Yey! not x64 support!
-				FARPROC function_address = GetProcAddress(module, name_data->Name);
+				// TODO: Yey! no x64 support!
+				FARPROC function_address = NULL;
+				if (use_windows_loader) {
+					function_address = GetProcAddress(windows_loaded_module, (LPSTR)name_data->Name);
+				} else {
+					function_address = (FARPROC)loaded_module_dependency->get_proc_address((LPSTR)name_data->Name);
+				}
+
 				if (NULL == function_address) {
 					TRACE_AND_THROW_WINAPI(GetProcAddressFailedException, GetProcAddress);
 				}

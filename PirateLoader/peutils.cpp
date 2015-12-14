@@ -27,8 +27,12 @@ namespace peutils {
 		TRACE("Dll Magic Verified")
 	}
 
+	PIMAGE_NT_HEADERS32 get_pe_header_pointer(HMODULE module) {
+		return (PIMAGE_NT_HEADERS32)((PBYTE)(module) + ((PIMAGE_DOS_HEADER)(module))->e_lfanew);
+	}
+	
 	PIMAGE_NT_HEADERS32 get_pe_header_pointer(const VirtualMemoryPtr& memory) {
-		return (PIMAGE_NT_HEADERS32)((PBYTE)(memory.get()) + ((PIMAGE_DOS_HEADER)(memory.get()))->e_lfanew);
+		return get_pe_header_pointer((HMODULE)memory.get());
 	}
 
 	PIMAGE_NT_HEADERS32 get_pe_header_pointer(const vector<byte>& dll_buffer) {

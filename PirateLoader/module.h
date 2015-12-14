@@ -21,6 +21,7 @@ namespace dllloader {
 		virtual ~Module();
 
 		DllExportedFunction get_proc_address(const string& export_name);
+
 		string get_module_name();
 
 	private:

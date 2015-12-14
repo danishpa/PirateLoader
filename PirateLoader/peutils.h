@@ -13,6 +13,8 @@ namespace peutils {
 
 	void verify_dll_magic(const vector<byte>& buffer);
 
+	PIMAGE_NT_HEADERS32 get_pe_header_pointer(HMODULE module);
+
 	PIMAGE_NT_HEADERS32 get_pe_header_pointer(const VirtualMemoryPtr& memory);
 
 	PIMAGE_NT_HEADERS32 get_pe_header_pointer(const vector<byte>& dll_buffer);
